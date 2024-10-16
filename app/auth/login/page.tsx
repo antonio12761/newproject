@@ -1,99 +1,93 @@
-// app/auth/login/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { signIn } from "next-auth/react"; // Usa il signIn di NextAuth
-import { useSearchParams, useRouter } from "next/navigation";
-import Swal from "sweetalert2"; // SweetAlert2 per i messaggi di alert
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import Swal from "sweetalert2";
+import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button"; // Usa il componente Button
+
+// Schema di validazione Zod per il login
+const loginSchema = z.object({
+  email: z.string().email("Inserisci una email valida"),
+  password: z.string().min(6, "La password deve contenere almeno 6 caratteri"),
+});
+
+type LoginFormInputs = z.infer<typeof loginSchema>;
 
 const LoginPage = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false); // Stato per il caricamento
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  useEffect(() => {
-    const error = searchParams.get("error");
-    const success = searchParams.get("success");
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid }, // Ottieni lo stato di validità
+  } = useForm<LoginFormInputs>({
+    resolver: zodResolver(loginSchema),
+    mode: "onChange", // Valida il form mentre l'utente inserisce i dati
+  });
 
-    if (error) {
-      if (error === "invalid_token") {
-        setMessage("Token non valido.");
-      } else if (error === "missing_token") {
-        setMessage("Token mancante.");
-      } else {
-        setMessage("Errore durante il login.");
-      }
-    }
+  const onSubmit = async (data: LoginFormInputs) => {
+    setIsSubmitting(true); // Imposta il caricamento su true
 
-    if (success) {
-      Swal.fire({
-        icon: "success",
-        title: "Email verificata",
-        text: "Email verificata con successo! Ora puoi effettuare il login.",
-      });
-    }
-  }, [searchParams]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMessage("");
-
-    // Verifica che i campi email e password siano compilati
-    if (!email || !password) {
-      Swal.fire({
-        icon: "warning",
-        title: "Campi mancanti",
-        text: "Per favore, inserisci sia l'email che la password.",
-      });
-      return;
-    }
-
-    // Usa `signIn` di NextAuth per eseguire l'autenticazione
     const result = await signIn("credentials", {
-      redirect: false, // Disabilita il redirect automatico
-      email,
-      password,
+      redirect: false,
+      email: data.email,
+      password: data.password,
     });
 
+    setIsSubmitting(false); // Reimposta il caricamento su false
+
     if (result?.error) {
-      if (result.error.includes("Email non verificata")) {
-        Swal.fire({
-          icon: "error",
-          title: "Email non verificata",
-          text: "La tua email non è stata verificata. Controlla la tua posta.",
-        });
-      } else {
-        setMessage(result.error);
-      }
+      Swal.fire({
+        icon: "error",
+        title: "Errore",
+        text: result.error,
+      });
     } else {
-      router.push("/dashboard"); // Reindirizza alla dashboard se il login ha successo
+      router.push("/dashboard");
     }
   };
 
+  const handleInvalidSubmit = () => {
+    Swal.fire({
+      icon: "error",
+      title: "Campi non validi",
+      text: "Assicurati di compilare correttamente tutti i campi prima di inviare.",
+    });
+  };
+
   return (
-    <div>
-      <h1>Login</h1>
-      {message && <p>{message}</p>}
-      <form onSubmit={handleSubmit}>
-        <input
+    <Card title="Login">
+      <form onSubmit={handleSubmit(onSubmit)} onInvalid={handleInvalidSubmit}>
+        <Input
+          label="Email"
           type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
-          required
+          placeholder="Inserisci la tua email"
+          {...register("email")}
+          error={errors.email?.message}
         />
-        <input
+        <Input
+          label="Password"
           type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          required
+          placeholder="Inserisci la tua password"
+          {...register("password")}
+          error={errors.password?.message}
         />
-        <button type="submit">Login</button>
+
+        <Button
+          label="Login"
+          type="submit"
+          isLoading={isSubmitting}
+          disabled={!isValid || isSubmitting}
+        />
       </form>
-    </div>
+    </Card>
   );
 };
 

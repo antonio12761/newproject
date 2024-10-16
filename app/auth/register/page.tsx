@@ -1,123 +1,108 @@
 "use client";
 
-import React from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useRouter } from "next/navigation";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import Swal from "sweetalert2";
+import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button"; // Usa il componente Button
 
-interface RegisterFormInputs {
-  email: string;
-  password: string;
-  confirmPassword: string;
-}
+// Schema di validazione Zod per la registrazione
+const registerSchema = z.object({
+  email: z.string().email("Inserisci una email valida"),
+  password: z.string().min(6, "La password deve contenere almeno 6 caratteri"),
+});
+
+type RegisterFormInputs = z.infer<typeof registerSchema>;
 
 const RegisterPage = () => {
-  const { register, handleSubmit, watch, formState } =
-    useForm<RegisterFormInputs>({
-      mode: "onChange", // Controlla la validità in tempo reale
-    });
-  const router = useRouter();
-  const password = watch("password");
+  const [isSubmitting, setIsSubmitting] = useState(false); // Stato per gestire l'invio del form
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid }, // Ottieni gli errori e lo stato di validità
+  } = useForm<RegisterFormInputs>({
+    resolver: zodResolver(registerSchema),
+    mode: "onChange", // Valida il form mentre l'utente inserisce i dati
+  });
 
   const onSubmit = async (data: RegisterFormInputs) => {
+    setIsSubmitting(true); // Imposta lo stato di invio in corso
     try {
-      const response = await fetch("/api/auth/register", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          email: data.email,
-          password: data.password,
-        }),
+        body: JSON.stringify(data),
       });
 
-      if (response.ok) {
-        // Mostra alert di successo
+      if (res.ok) {
         Swal.fire({
           icon: "success",
-          title: "Registrazione riuscita",
-          text: "Controlla la tua mail per confermare l'account",
+          title: "Registrazione completata",
+          text: "Controlla la tua email per verificare l'account.",
         });
-
-        // Esegui il redirect alla pagina di login
-        router.push("/auth/login");
       } else {
-        const errorData = await response.json();
-        // Mostra alert di errore con il messaggio dell'API
+        const errorData = await res.json();
         Swal.fire({
           icon: "error",
           title: "Errore",
-          text:
-            errorData.message || "Qualcosa è andato storto. Riprova più tardi.",
+          text: errorData.message,
         });
       }
     } catch (error) {
-      // Mostra un alert di errore generico
       Swal.fire({
         icon: "error",
         title: "Errore",
-        text: "Errore di rete. Riprova più tardi.",
+        text: "Errore durante la registrazione.",
       });
+    } finally {
+      setIsSubmitting(false); // Reimposta lo stato dopo la registrazione
     }
   };
 
+  const handleInvalidSubmit = () => {
+    // Mostra un alert se il form non è valido e si tenta di cliccare il pulsante
+    Swal.fire({
+      icon: "error",
+      title: "Campi non validi",
+      text: "Assicurati di compilare correttamente tutti i campi prima di inviare.",
+    });
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-      <h1 className="text-2xl font-bold">Registrati</h1>
-      <form onSubmit={handleSubmit(onSubmit)} className="mt-6 w-96">
-        <div>
-          <input
-            {...register("email", { required: "L'email è richiesta" })}
-            type="email"
-            placeholder="Email"
-            className="w-full p-2 mb-4 border border-gray-300 rounded"
-          />
-          {formState.errors.email && (
-            <p className="text-red-500">{formState.errors.email.message}</p>
-          )}
-        </div>
-        <div>
-          <input
-            {...register("password", { required: "La password è richiesta" })}
-            type="password"
-            placeholder="Password"
-            className="w-full p-2 mb-4 border border-gray-300 rounded"
-          />
-          {formState.errors.password && (
-            <p className="text-red-500">{formState.errors.password.message}</p>
-          )}
-        </div>
-        <div>
-          <input
-            {...register("confirmPassword", {
-              required: "Conferma la password",
-              validate: (value) =>
-                value === password || "Le password non corrispondono",
-            })}
-            type="password"
-            placeholder="Conferma Password"
-            className="w-full p-2 mb-4 border border-gray-300 rounded"
-          />
-          {formState.errors.confirmPassword && (
-            <p className="text-red-500">
-              {formState.errors.confirmPassword.message}
-            </p>
-          )}
-        </div>
-        <button
+    <Card title="Registrazione">
+      <h1 className="text-center mb-4">Registrati</h1>
+      <form onSubmit={handleSubmit(onSubmit)} onInvalid={handleInvalidSubmit}>
+        {/* Componente Input riutilizzabile */}
+        <Input
+          label="Email"
+          type="email"
+          placeholder="Inserisci la tua email"
+          {...register("email")}
+          error={errors.email?.message}
+        />
+
+        <Input
+          label="Password"
+          type="password"
+          placeholder="Inserisci la tua password"
+          {...register("password")}
+          error={errors.password?.message}
+        />
+
+        <Button
+          label="Registrati"
           type="submit"
-          className={`w-full p-2 text-white rounded ${
-            formState.isValid
-              ? "bg-green-500"
-              : "bg-gray-300 cursor-not-allowed"
-          }`}
-          disabled={!formState.isValid}
-        >
-          Registrati
-        </button>
+          isLoading={isSubmitting}
+          disabled={!isValid || isSubmitting}
+        />
       </form>
-    </div>
+    </Card>
   );
 };
 
